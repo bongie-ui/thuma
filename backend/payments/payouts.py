@@ -6,7 +6,7 @@ from django.db import transaction
 from mandates.models import LedgerEntry, Request
 from mandates.services import record
 
-from . import rails
+from . import last_mile, rails
 from .models import RailTransaction
 
 PAYPAL = "PAYPAL"
@@ -84,6 +84,7 @@ def apply_rail_status(tx, status, raw=None):
         _set_request(request, Request.PAID)
         record(request.mandate, LedgerEntry.PAID, actor, request=request, amount=tx.amount, rail=tx.rail,
                external_id=tx.external_id, simulated=tx.simulated)
+        last_mile.start(tx)
     elif status in (RailTransaction.FAILED, RailTransaction.RETURNED):
         _set_request(request, Request.FAILED)
         record(request.mandate, LedgerEntry.FAILED, actor, request=request, amount=tx.amount, rail=tx.rail,

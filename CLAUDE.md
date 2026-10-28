@@ -110,12 +110,13 @@ Sandbox accounts are all US PayPal accounts; story locations differ.
   - services: `submit_request`, `reassess`, `execute_decision`, `apply_approval`, `inbox`; `payments/payouts.py` idempotent `pay_request` (`thuma-<request id>`) + `apply_rail_status`; `rails.for_payee`
   - `.github/workflows/tests.yml` runs tests + migration check on push
   - Open: `LOCAL_MOBILE_MONEY` still routes to the simulated rail; Phase 4 swaps in the real Payout + last mile. Your `.env` still has `LLM_API_KEY`; rename to `OPENAI_API_KEY` and add `MANDATE_SIGNING_KEY` (see `.env.example`)
-- [ ] Phase 3 — Render deploy — files ready 28 Oct, **not live yet** (needs GitHub push + Render Blueprint)
+- [x] Phase 3 — Render deploy — 28 Oct: live on Render, `/api/health/paypal/` returns connected (sandbox, api-m); repo github.com/bongie-ui/thuma, CI green
   - `render.yaml` (web + Postgres, Frankfurt, free), `build.sh` (pip, frontend if present, collectstatic, migrate), `/api/health/` liveness (DB only) used as Render health check
   - Production: `DEBUG = False` hard-coded, HSTS, secure cookies; `check --deploy` clean; gunicorn + WhiteNoise rehearsed locally
   - Render free tier: web sleeps after 15 min (~1 min wake); no persistent disk (evidence uploads lost on redeploy — store in DB/object storage before Phase 5); **free Postgres expires 30 days after creation → upgrade before ~29 Nov** so it survives judging (1–15 Dec)
-  - Done when `https://<app>.onrender.com/api/health/paypal` returns connected
-- [ ] Phase 4 — PayPal funding, payouts, mobile money rail, webhooks
+- [ ] Phase 4 — PayPal funding, payouts, mobile money rail, webhooks — in progress (97 tests)
+  - Done (no PayPal API code): `payments/last_mile.py` simulated last mile (bundles/airtime DELIVERING→DELIVERED after 3s; cash AWAITING_COLLECTION + 6-digit code + beneficiary chat notice → COLLECTED), started on payout SUCCESS; `manage.py poll_payouts [--watch]`
+  - **Blocked on APIMatic Context Plugin (rule 5):** Orders create/capture via `paypal-server-sdk`, `LocalMobileMoneyRail` (real Payout to provider with `{beneficiary_phone, product, thuma_request_id}` note), webhooks (`/api/webhooks/paypal`, signature verification, dedupe), fund/capture + demo collect endpoints; then a real sandbox payout via a Request and a webhook received on Render
 - [ ] Phase 5 — Agent (drafting, extraction, fraud AI, chat)
 - [ ] Phase 6 — Frontend + seed_demo
 - [ ] Phase 7 — AG Studio dashboard (+ Isililo, Postman)
