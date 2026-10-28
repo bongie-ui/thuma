@@ -201,6 +201,19 @@ class SharedSupportTests(TestCase):
         self.assertEqual(req.rail_transactions.count(), 1)
         self.assertEqual(req.latest_decision.decided_by, str(self.b.pk))
 
+    def test_beneficiary_not_covered(self):
+        other = services.register_beneficiary(family=self.f.family, name="Other Person", phone="+263770000077",
+                                              registered_by=self.a, allowed_products=["airtime"])
+        req = submit(self.f, self.mandate, "5", "airtime", user=self.a, beneficiary=other)
+        self.assertEqual(kinds(req, False), {"allowed_beneficiaries"})
+
+    def test_auto_approve_below(self):
+        mandate = self.f.support_mandate(extra_rules=[{"kind": "auto_approve_below", "params": {"amount": 20}}])
+        self.assertEqual(submit(self.f, mandate, "20", "airtime", user=self.a).status, Request.APPROVED)
+        req = submit(self.f, mandate, "25", "cash", user=self.a)
+        self.assertEqual(req.status, Request.ESCALATED)
+        self.assertEqual(kinds(req, False), {"auto_approve_below"})
+
     def test_funder_reject(self):
         req = submit(self.f, self.mandate, "60", "cash", user=self.a)
         req = services.apply_approval(req, self.b, Approval.REJECT, "not now")

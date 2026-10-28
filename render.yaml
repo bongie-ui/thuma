@@ -1,0 +1,63 @@
+# Render Blueprint: one web service (Django + built React via WhiteNoise) + PostgreSQL.
+# Free Postgres expires 30 days after creation: upgrade it before judging (1–15 Dec).
+databases:
+  - name: thuma-db
+    plan: free
+    region: frankfurt
+    databaseName: thuma
+    user: thuma
+
+services:
+  - type: web
+    name: thuma
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: ./build.sh
+    startCommand: cd backend && gunicorn thuma.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /api/health/
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13"
+      - key: DJANGO_SETTINGS_MODULE
+        value: thuma.settings.production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: thuma-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      # Generated once and kept: changing it invalidates every mandate signature.
+      - key: MANDATE_SIGNING_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        sync: false
+      - key: OPENAI_MODEL_FAST
+        sync: false
+      - key: DEFAULT_PHONE_COUNTRY_CODE
+        value: "263"
+      - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_REPLAY
+        value: "false"
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: DEMO_FUNDER_1_EMAIL
+        sync: false
+      - key: DEMO_FUNDER_2_EMAIL
+        sync: false
+      - key: DEMO_FUNDER_3_EMAIL
+        sync: false

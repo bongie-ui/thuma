@@ -1,4 +1,4 @@
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from .phones import find_phones, normalize_phone
 
@@ -18,3 +18,10 @@ class PhoneTests(SimpleTestCase):
 
     def test_find_phones_international(self):
         self.assertEqual(find_phones("call me on +27 82 555 0100"), ["+27825550100"])
+
+
+class HealthTests(TestCase):
+    def test_health(self):
+        resp = self.client.get("/api/health/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "ok")
