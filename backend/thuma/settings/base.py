@@ -4,6 +4,7 @@ local.py (manage.py default) and production.py (wsgi/asgi default) build on this
 """
 
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -116,7 +117,13 @@ DEFAULT_PHONE_COUNTRY_CODE = os.environ.get("DEFAULT_PHONE_COUNTRY_CODE") or "26
 DEMO_MODE = env_bool("DEMO_MODE", False)
 DEMO_REPLAY = env_bool("DEMO_REPLAY", False)
 
-# OpenAI (agent/llm.py is the only consumer).
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+TESTING = sys.argv[1:2] == ["test"]
+
+# OpenAI (agent/llm.py is the only consumer). Tests never call the real API.
+OPENAI_API_KEY = "" if TESTING else os.environ.get("OPENAI_API_KEY", "")
+LLM_TIMEOUT_SECONDS = int(os.environ.get("LLM_TIMEOUT_SECONDS") or 60)
+# Recorded LLM responses for DEMO_REPLAY (agent/demo_replay.py).
+DEMO_CACHE_DIR = BASE_DIR / "demo_cache"
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "")
 OPENAI_MODEL_FAST = os.environ.get("OPENAI_MODEL_FAST", "")

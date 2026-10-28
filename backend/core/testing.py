@@ -12,9 +12,11 @@ from mandates.models import Funding, Mandate, Payee
 class Fixtures:
     """Builds a family with funders, a beneficiary and payees. Use from TestCase.setUp."""
 
-    def __init__(self, n_funders=3):
+    def __init__(self, n_funders=3, prefix=""):
         User = get_user_model()
-        self.funders = [User.objects.create_user(f"funder{i}", password="x", first_name=f"Funder{i}")
+        prefix = prefix or ("" if not User.objects.filter(username="funder1").exists()
+                            else f"f{User.objects.count()}-")
+        self.funders = [User.objects.create_user(f"{prefix}funder{i}", password="x", first_name=f"Funder{i}")
                         for i in range(1, n_funders + 1)]
         self.owner = self.funders[0]
         self.family = Family.objects.create(name="Test family", created_by=self.owner)

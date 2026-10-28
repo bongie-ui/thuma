@@ -10,11 +10,12 @@ from datetime import timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import Membership
 from core.phones import find_phones, normalize_phone
-from mandates.models import Beneficiary, BlockedPhone, Request, RiskAssessment
+from mandates.models import Beneficiary, BlockedPhone, Payee, Request, RiskAssessment
 
 SIGNAL_WEIGHTS = {
     "UNREGISTERED_SENDER": 35,
@@ -49,8 +50,45 @@ class AIUnavailable(Exception):
 
 
 def no_intent_analyzer(context):
-    """Default until the LLM analyzer is wired in (Phase 5): treated as an AI outage."""
+    """Used when OpenAI is not configured: treated as an AI outage."""
     raise AIUnavailable("intent analysis not configured")
+
+
+INTENT_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["stated_intent", "flags", "ai_risk", "summary", "suggested_verification"],
+    "properties": {
+        "stated_intent": {"type": "string"},
+        "flags": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False, "required": ["flag", "reason", "quote"],
+            "properties": {"flag": {"type": "string", "enum": list(AI_FLAGS)}, "reason": {"type": "string"},
+                           "quote": {"type": "string"}}}},
+        "ai_risk": {"type": "integer"},
+        "summary": {"type": "string"},
+        "suggested_verification": {"type": "string"},
+    },
+}
+
+
+def llm_intent_analyzer(context):
+    """Layer 2 via OpenAI structured output. Raises on any failure; assess() then falls back."""
+    from agent import llm, prompts
+
+    if not llm.is_configured():
+        raise AIUnavailable("OpenAI is not configured")
+    prompt = prompts.render(
+        "fraud_intent", message_text=context["message_text"] or "(no message)",
+        requester_registered="yes" if context["requester_registered"] else "no",
+        amount=context["amount"], currency=context["currency"], product=context["product"] or "(not given)",
+        mandate_purpose=context["mandate_purpose"],
+        recent_messages=" | ".join(context["beneficiary_recent_messages"]) or "(none on record)")
+    result, model = llm.structured(prompt, INTENT_SCHEMA, name="fraud_intent")
+    return {**result, "model_name": model}
+
+
+def default_intent_analyzer():
+    from agent import llm
+    return llm_intent_analyzer if llm.is_configured() else no_intent_analyzer
 
 
 def level_for(score):
@@ -64,6 +102,8 @@ def level_for(score):
 def registered_phones(family):
     phones = set(Beneficiary.objects.filter(family=family).values_list("phone", flat=True))
     phones |= set(Membership.objects.filter(family=family).exclude(phone="").values_list("phone", flat=True))
+    phones |= set(Payee.objects.filter(Q(family=family) | Q(family__isnull=True)).exclude(phone="")
+                  .values_list("phone", flat=True))
     return phones
 
 
@@ -128,9 +168,11 @@ def intent_context(request):
     registered = request.requester_user_id is not None or (sender in registered_phones(request.mandate.family))
     previous = []
     if request.beneficiary:
-        previous = list(Request.objects.filter(beneficiary=request.beneficiary, requester_phone=request.beneficiary.phone)
-                        .exclude(pk=request.pk).exclude(message_text="").order_by("-created_at")
-                        .values_list("message_text", flat=True)[:5])
+        from agent.models import ChatMessage
+        previous = list(ChatMessage.objects.filter(conversation__participant_phone=request.beneficiary.phone,
+                                                   conversation__family=request.mandate.family, role="user")
+                        .exclude(text="").exclude(text=request.message_text).order_by("-created_at")
+                        .values_list("text", flat=True)[:5])
     return {
         "message_text": request.message_text,
         "requester_registered": registered,

@@ -62,6 +62,7 @@ class Payee(BaseModel):
     rail = models.CharField(max_length=20, choices=RAILS, default=PAYPAL_PAYOUT)
     paypal_email = models.EmailField(blank=True)
     external_ref = models.CharField(max_length=120, blank=True)  # biller account number etc.
+    phone = models.CharField(max_length=16, blank=True, validators=[validate_e164])  # for payee chat
     verified = models.BooleanField(default=False)
 
     def __str__(self):
@@ -193,6 +194,28 @@ class Request(BaseModel):
         return f"{self.product or 'request'} {self.amount} ({self.status})"
 
 
+class Upload(BaseModel):
+    """A file sent in chat or the app. Bytes live in the database (Render's free tier has no persistent disk)."""
+
+    IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp", "image/gif")
+
+    family = models.ForeignKey(Family, on_delete=models.CASCADE, related_name="uploads")
+    uploaded_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    uploaded_by_phone = models.CharField(max_length=16, blank=True)
+    name = models.CharField(max_length=200, blank=True)
+    content_type = models.CharField(max_length=80)
+    size = models.PositiveIntegerField(default=0)
+    sha256 = models.CharField(max_length=64)
+    data = models.BinaryField()
+
+    @property
+    def is_image(self):
+        return self.content_type in self.IMAGE_TYPES
+
+    def __str__(self):
+        return self.name or str(self.id)
+
+
 class Evidence(BaseModel):
     QUOTE = "QUOTE"
     INVOICE = "INVOICE"
@@ -204,6 +227,7 @@ class Evidence(BaseModel):
     request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name="evidence")
     kind = models.CharField(max_length=16, choices=KINDS)
     file = models.FileField(upload_to="evidence/%Y/%m/", blank=True)
+    upload = models.ForeignKey(Upload, null=True, blank=True, on_delete=models.SET_NULL, related_name="evidence")
     extracted = models.JSONField(default=dict, blank=True)
     model_name = models.CharField(max_length=60, blank=True)
 

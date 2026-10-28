@@ -3,8 +3,10 @@
 Every state change writes an append-only LedgerEntry.
 """
 
+import hashlib
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -14,7 +16,7 @@ from core.phones import find_phones, normalize_phone
 
 from . import signing
 from .models import (Approval, Beneficiary, BlockedPhone, Decision, Funding, LedgerEntry, Mandate, MandateFunder,
-                     Request, Rule)
+                     Request, Rule, Upload)
 from .templates import validate_rules
 
 SYSTEM = "SYSTEM"
@@ -182,18 +184,59 @@ def change_beneficiary_phone(beneficiary, phone, user):
 
 def _intent_analyzer():
     from agent import fraud
-    return fraud.no_intent_analyzer
+    return fraud.default_intent_analyzer()
+
+
+ALLOWED_UPLOAD_TYPES = Upload.IMAGE_TYPES + ("application/pdf",)
+
+
+def create_upload(*, family, data, content_type, name="", user=None, phone=""):
+    if content_type not in ALLOWED_UPLOAD_TYPES:
+        raise ServiceError("Send a photo (JPEG, PNG, WebP) or a PDF")
+    if not data:
+        raise ServiceError("The file is empty")
+    if len(data) > settings.MAX_UPLOAD_BYTES:
+        raise ServiceError("The file is too large (8 MB maximum)")
+    return Upload.objects.create(family=family, uploaded_by=user, uploaded_by_phone=normalize_phone(phone) or phone,
+                                 name=name[:200], content_type=content_type, size=len(data),
+                                 sha256=hashlib.sha256(data).hexdigest(), data=data)
+
+
+def _extract(evidence):
+    from agent import extraction
+    return extraction.extract(evidence)
+
+
+def attach_evidence(request, upload, kind, extractor=None):
+    """Attach an uploaded file as evidence and read it. A failed read leaves the evidence unread,
+    which the rules treat as missing — never as passed."""
+    from agent.extraction import ExtractionError
+    from agent.llm import LLMError
+
+    if upload.family_id != request.mandate.family_id:
+        raise ServiceError("That file belongs to another family")
+    evidence = request.evidence.create(kind=kind, upload=upload)
+    try:
+        (extractor or _extract)(evidence)
+    except (ExtractionError, LLMError) as exc:
+        evidence.extracted = {}
+        evidence.model_name = ""
+        evidence.save(update_fields=["extracted", "model_name", "updated_at"])
+        evidence.error = str(exc)
+    return evidence
 
 
 @transaction.atomic
 def submit_request(*, mandate, amount, idempotency_key, channel=Request.APP, requester_user=None,
                    requester_phone="", requester_display="", beneficiary=None, payee=None, product="",
-                   message_text="", evidence=(), intent_analyzer=None, now=None):
+                   message_text="", evidence=(), uploads=(), summary_en="", intent_analyzer=None, extractor=None,
+                   now=None):
     """Create a Request, then run fraud.assess -> policy.evaluate -> execute_decision.
 
     Creating a request never pays by itself; only an APPROVE decision leads to a payout.
     Re-submitting the same idempotency_key returns the existing request untouched.
-    `evidence` is a list of {"kind", "extracted"} dicts attached before the policy runs.
+    `evidence` is a list of {"kind", "extracted"} dicts and `uploads` a list of (Upload, kind) pairs, both
+    attached (uploads are read by the vision model) before the policy runs.
     """
     from agent import fraud, policy
 
@@ -206,13 +249,15 @@ def submit_request(*, mandate, amount, idempotency_key, channel=Request.APP, req
         mandate=mandate, amount=Decimal(amount), idempotency_key=idempotency_key, channel=channel,
         requester_user=requester_user, requester_phone=normalize_phone(requester_phone) or requester_phone,
         requester_display=requester_display, beneficiary=beneficiary, payee=payee, product=product,
-        message_text=message_text)
+        message_text=message_text, summary_en=summary_en)
     record(mandate, LedgerEntry.REQUESTED, actor_of(requester_user) if requester_user else
            (request.requester_phone or SYSTEM), request=request, amount=request.amount, product=product,
            channel=channel)
     for item in evidence:
         request.evidence.create(kind=item["kind"], extracted=item.get("extracted") or {},
                                 model_name=item.get("model_name", ""))
+    for upload, kind in uploads:
+        attach_evidence(request, upload, kind, extractor=extractor)
 
     risk = fraud.assess(request, intent_analyzer=intent_analyzer or _intent_analyzer(), now=now)
     request.status = Request.ASSESSED

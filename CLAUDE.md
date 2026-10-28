@@ -97,7 +97,7 @@ Sandbox accounts are all US PayPal accounts; story locations differ.
 - [x] Sandbox accounts created; `thuma-platform` linked to platform@thuma.com (~10,000 USD)
 - [x] LLM chosen: OpenAI
 - [ ] Test payouts verified (hardware, school, mobile money)
-- [ ] OpenAI smoke test (isiNdebele + handwritten quote)
+- [~] OpenAI smoke test — isiNdebele chat ✓ (28 Oct, gpt-5.5-2026-04-23); handwritten quote photo still to test (needs a real photo in `backend/demo_assets/`)
 - [ ] APIMatic Context Plugin installed
 - [x] Phase 1 — Foundations (models, signing, templates) — 27 Oct
   - Settings split: `thuma/settings/{base,local,production}.py` (manage.py → local, wsgi/asgi → production; production refuses to start without `DJANGO_SECRET_KEY` + `MANDATE_SIGNING_KEY`)
@@ -117,7 +117,13 @@ Sandbox accounts are all US PayPal accounts; story locations differ.
 - [ ] Phase 4 — PayPal funding, payouts, mobile money rail, webhooks — in progress (97 tests)
   - Done (no PayPal API code): `payments/last_mile.py` simulated last mile (bundles/airtime DELIVERING→DELIVERED after 3s; cash AWAITING_COLLECTION + 6-digit code + beneficiary chat notice → COLLECTED), started on payout SUCCESS; `manage.py poll_payouts [--watch]`
   - **Blocked on APIMatic Context Plugin (rule 5):** Orders create/capture via `paypal-server-sdk`, `LocalMobileMoneyRail` (real Payout to provider with `{beneficiary_phone, product, thuma_request_id}` note), webhooks (`/api/webhooks/paypal`, signature verification, dedupe), fund/capture + demo collect endpoints; then a real sandbox payout via a Request and a webhook received on Render
-- [ ] Phase 5 — Agent (drafting, extraction, fraud AI, chat)
+- [x] Phase 5 — Agent (drafting, extraction, fraud AI, chat) — 28 Oct (128 tests; done before Phase 4 while APIMatic access is pending)
+  - `agent/llm.py` only `openai` import (openai==3.40.0, Chat Completions, strict JSON schema, 60s timeout, 2 retries, token logging); `demo_replay.py` records when `DEMO_MODE`, replays when `DEMO_REPLAY` (`backend/demo_cache/`); tests never call OpenAI (`settings.TESTING` blanks the key)
+  - `drafting.py` (repair pass, drops ids not in the family), `extraction.py` (quote/invoice line items with price-ceiling item keys; milestone photo verdict; images only, PDFs rejected → evidence stays unread = rule fails), fraud Layer 2 `llm_intent_analyzer` used automatically when OpenAI is configured
+  - `chat.py`: 6 strict tools, none can pay/approve/change rules (tested); participants = funder / beneficiary / payee / unknown number with scoped visibility; fraud check always sees the person's own words; requester never sees fraud details
+  - `Upload` model stores files in the DB (no disk on Render); `Payee.phone`; payee numbers count as registered for fraud
+  - Scenarios 1–5 pass as backend tests (`agent/tests/test_scenarios.py`); live manual test via `manage.py agent_chat` passed (isiNdebele request approved, same-day bundles refused, hospital scam HELD_FRAUD score 100 with registered-number verification). Prompts tightened after live runs: never offer to pay a number from a message, always record money requests so funders are alerted, no echoing urgency
+  - Set `OPENAI_MODEL=gpt-5.5-2026-04-23` and `OPENAI_MODEL_FAST=gpt-5.4-mini-2026-03-17` in `.env` and on Render (missing in `.env` today)
 - [ ] Phase 6 — Frontend + seed_demo
 - [ ] Phase 7 — AG Studio dashboard (+ Isililo, Postman)
 - [ ] Phase 8 — Feature freeze, hardening, README
