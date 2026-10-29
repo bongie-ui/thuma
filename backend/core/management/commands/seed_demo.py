@@ -21,12 +21,27 @@ from payments.payouts import reference_for
 
 FAMILY = "Fuyana family"
 MAMA_PHONE = "+263770000001"  # fake number
-FUNDERS = [  # username, first, last, country, phone (fake), role, env var for the sandbox PayPal email
+# The PayPal sandbox accounts created for the demo (not secrets). An env var with the same name overrides each one.
+SANDBOX_EMAILS = {
+    "DEMO_FUNDER_1_EMAIL": "mmeli.fuyana@personal.example.com",
+    "DEMO_FUNDER_2_EMAIL": "bonginkosi.fuyana@personal.example.com",
+    "DEMO_FUNDER_3_EMAIL": "andile.fuyana@personal.example.com",
+    "DEMO_PAYEE_HARDWARE_EMAIL": "hardware@business.example.com",
+    "DEMO_PAYEE_SCHOOL_EMAIL": "fees@business.example.com",
+    "DEMO_PAYEE_MOBILE_MONEY_EMAIL": "mobilemoney@business.example.com",
+}
+
+
+def sandbox_email(var):
+    return os.environ.get(var) or SANDBOX_EMAILS.get(var, "")
+
+
+FUNDERS = [  # username, first, last, country, phone (fake), role, sandbox email (SANDBOX_EMAILS key)
     ("mmeli", "Mmeli", "Fuyana", "ZA", "+27820000001", Membership.ADMIN, "DEMO_FUNDER_1_EMAIL"),
     ("bonginkosi", "Bonginkosi", "Fuyana", "US", "+15550000002", Membership.FUNDER, "DEMO_FUNDER_2_EMAIL"),
     ("andile", "Andile", "Fuyana", "GB", "+447700900003", Membership.FUNDER, "DEMO_FUNDER_3_EMAIL"),
 ]
-PAYEES = [  # key, name, kind, rail, env var for the sandbox PayPal email, phone (for payee chat), external ref
+PAYEES = [  # key, name, kind, rail, sandbox email (SANDBOX_EMAILS key), phone (for payee chat), external ref
     ("hardware", "Gwanda Hardware", Payee.SUPPLIER, Payee.PAYPAL_PAYOUT, "DEMO_PAYEE_HARDWARE_EMAIL",
      "+263770000010", ""),
     ("school", "Sunrise Academy", Payee.SCHOOL, Payee.PAYPAL_PAYOUT, "DEMO_PAYEE_SCHOOL_EMAIL", "+263770000020", ""),
@@ -81,8 +96,8 @@ class Command(BaseCommand):
             if User.objects.filter(username=username).exists():
                 raise CommandError(f"A user called {username} already exists outside the demo family")
             user = User.objects.create_user(username, password=password, first_name=first, last_name=last,
-                                            email=os.environ.get(email_var, ""))
-            funders.append((user, country, phone, role, os.environ.get(email_var, "")))
+                                            email=sandbox_email(email_var))
+            funders.append((user, country, phone, role, sandbox_email(email_var)))
         mmeli, bonginkosi, andile = (f[0] for f in funders)
 
         family = Family.objects.create(name=FAMILY, created_by=mmeli)
@@ -95,9 +110,7 @@ class Command(BaseCommand):
                                              allowed_products=["airtime", "bundles", "cash"])
         payees = {}
         for key, name, kind, rail, email_var, phone, ref in PAYEES:
-            email = os.environ.get(email_var, "") if email_var else ""
-            if email_var and not email:
-                self.stdout.write(self.style.WARNING(f"{email_var} is not set: payouts to {name} will fail"))
+            email = sandbox_email(email_var) if email_var else ""
             payees[key] = Payee.objects.create(family=family, name=name, kind=kind, rail=rail, paypal_email=email,
                                                phone=phone, external_ref=ref, verified=True)
 

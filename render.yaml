@@ -63,9 +63,3 @@ services:
         sync: false
       - key: DEMO_FUNDER_3_EMAIL
         sync: false
-      - key: DEMO_PAYEE_HARDWARE_EMAIL
-        sync: false
-      - key: DEMO_PAYEE_SCHOOL_EMAIL
-        sync: false
-      - key: DEMO_PAYEE_MOBILE_MONEY_EMAIL
-        sync: false
