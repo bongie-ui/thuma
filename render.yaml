@@ -14,12 +14,14 @@ services:
     plan: free
     region: frankfurt
     buildCommand: ./build.sh
-    startCommand: cd backend && gunicorn thuma.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    startCommand: cd backend && gunicorn thuma.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     healthCheckPath: /api/health/
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: "3.13"
+      - key: NODE_VERSION
+        value: "22"
       - key: DJANGO_SETTINGS_MODULE
         value: thuma.settings.production
       - key: DATABASE_URL
@@ -60,4 +62,10 @@ services:
       - key: DEMO_FUNDER_2_EMAIL
         sync: false
       - key: DEMO_FUNDER_3_EMAIL
+        sync: false
+      - key: DEMO_PAYEE_HARDWARE_EMAIL
+        sync: false
+      - key: DEMO_PAYEE_SCHOOL_EMAIL
+        sync: false
+      - key: DEMO_PAYEE_MOBILE_MONEY_EMAIL
         sync: false

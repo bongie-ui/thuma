@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand
 
 from payments import last_mile, rails
 from payments.models import RailTransaction
-from payments.payouts import _RAIL_STATUS, apply_rail_status
+from payments.payouts import refresh
 
 
 def poll_once():
@@ -14,14 +14,11 @@ def poll_once():
     for tx in RailTransaction.objects.filter(status=RailTransaction.PENDING).exclude(external_id="") \
             .select_related("request__payee"):
         try:
-            result = rails.for_payee(tx.request.payee).status(tx.external_id)
+            _tx, updated = refresh(tx)
         except rails.RailError as exc:
             print(f"{tx.reference}: {exc}")
             continue
-        status = _RAIL_STATUS.get(result.status, RailTransaction.PENDING)
-        if status != tx.status:
-            apply_rail_status(tx, status, raw=result.raw)
-            changed += 1
+        changed += updated
     delivered = sum(1 for tx in last_mile.advance_all() if tx.last_mile_status == RailTransaction.DELIVERED)
     return changed, delivered
 

@@ -1,17 +1,11 @@
 from django.contrib import admin
-from django.http import JsonResponse
-from django.urls import include, path
+from django.urls import include, path, re_path
 
-from core.views import health
-
-
-def index(request):
-    return JsonResponse({"service": "thuma", "endpoints": ["/api/health/", "/api/health/paypal/", "/admin/"]})
-
+from core.views import spa
 
 urlpatterns = [
-    path("", index),
     path("admin/", admin.site.urls),
-    path("api/health/", health, name="health"),
-    path("api/", include("payments.urls")),
+    path("api/", include("thuma.api_urls")),
+    # Everything else is the React app (client-side routes included).
+    re_path(r"^(?!api/|admin/|static/).*$", spa),
 ]

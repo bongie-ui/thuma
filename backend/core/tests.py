@@ -25,3 +25,30 @@ class HealthTests(TestCase):
         resp = self.client.get("/api/health/")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["status"], "ok")
+
+
+class SeedDemoTests(TestCase):
+    """The seed must produce valid, signed, funded mandates and be safely re-runnable."""
+
+    def test_seed_and_reset(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        from mandates import services, signing
+        from mandates.models import Mandate, Request
+
+        call_command("seed_demo", stdout=StringIO())
+        with self.assertRaises(CommandError):
+            call_command("seed_demo", stdout=StringIO())
+        call_command("seed_demo", "--reset", stdout=StringIO())
+
+        mandates = list(Mandate.objects.all())
+        self.assertEqual(len(mandates), 3)
+        for m in mandates:
+            self.assertTrue(signing.verify(m))
+            self.assertGreater(services.mandate_balance(m), 0)
+        history = Request.objects.filter(status=Request.PAID)
+        self.assertGreaterEqual(history.count(), 3)  # AMOUNT_SPIKE needs a baseline
+        self.assertFalse(history.filter(created_at__gte=services.timezone.now().replace(day=1)).exists())

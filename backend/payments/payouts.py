@@ -90,3 +90,18 @@ def apply_rail_status(tx, status, raw=None):
         record(request.mandate, LedgerEntry.FAILED, actor, request=request, amount=tx.amount, rail=tx.rail,
                external_id=tx.external_id, status=status)
     return tx
+
+
+def refresh(tx):
+    """Bring one transaction up to date without webhooks: ask the rail about a pending payout, then advance
+    the simulated last mile. Returns (tx, changed)."""
+    changed = False
+    if tx.status == RailTransaction.PENDING and tx.external_id:
+        result = rails.for_payee(tx.request.payee).status(tx.external_id)
+        status = _RAIL_STATUS.get(result.status, RailTransaction.PENDING)
+        if status != tx.status:
+            tx = apply_rail_status(tx, status, raw=result.raw)
+            changed = True
+    if tx.last_mile_status == RailTransaction.DELIVERING:
+        tx = last_mile.advance(tx)
+    return tx, changed

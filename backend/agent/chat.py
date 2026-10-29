@@ -203,9 +203,7 @@ def tool_create_request(p, conversation, current, mandate_id, product, amount, p
         payee = (Payee.objects.filter(pk=payee_id, family=p.family).first()
                  or Payee.objects.filter(pk=payee_id, family__isnull=True).first())
     if payee is None:
-        allowed = _rule_ids(mandate, "allowed_payees", "payee_ids")
-        if len(allowed) == 1:  # e.g. the single mobile money provider of a support mandate
-            payee = Payee.objects.filter(pk=next(iter(allowed))).first()
+        payee = services.sole_payee(mandate)
     uploads = [(_upload(p, a["upload_id"]), a["kind"]) for a in attachments]
 
     request = services.submit_request(

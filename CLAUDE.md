@@ -124,7 +124,13 @@ Sandbox accounts are all US PayPal accounts; story locations differ.
   - `Upload` model stores files in the DB (no disk on Render); `Payee.phone`; payee numbers count as registered for fraud
   - Scenarios 1–5 pass as backend tests (`agent/tests/test_scenarios.py`); live manual test via `manage.py agent_chat` passed (isiNdebele request approved, same-day bundles refused, hospital scam HELD_FRAUD score 100 with registered-number verification). Prompts tightened after live runs: never offer to pay a number from a message, always record money requests so funders are alerted, no echoing urgency
   - Set `OPENAI_MODEL=gpt-5.5-2026-04-23` and `OPENAI_MODEL_FAST=gpt-5.4-mini-2026-03-17` in `.env` and on Render (missing in `.env` today)
-- [ ] Phase 6 — Frontend + seed_demo
+- [~] Phase 6 — Frontend + seed_demo — 29 Oct (151 tests); built and checked over HTTP locally, Render click-through still to do
+  - REST API (§10) as function views: `thuma/api_urls.py`; `core/api.py` (caller's family, `ServiceError` → 400); `mandates/serializers.py` + `describe.py` (rules in plain words, per-product coverage for quick actions); auth + demo persona login (`DEMO_MODE` only, never staff); chat API where a funder can play a beneficiary/payee/unknown number in demo mode (cards scoped by `chat.outcome`); drf-spectacular at `/api/schema/` + `/api/docs/` (function views not annotated yet → do with Postman in Phase 7)
+  - `services.sole_payee`, `payouts.refresh(tx)` (request detail reads settle pending payouts + last mile, since Render has no worker)
+  - `core/management/commands/seed_demo.py [--reset]`: 3 users (`mmeli`, `bonginkosi`, `andile`), Mama, 5 payees, Akha/Imfundo/Isikhwama signed + funded, 3 months of paid history (back-dated, no rails). New env: `DEMO_PAYEE_{HARDWARE,SCHOOL,MOBILE_MONEY}_EMAIL`
+  - `frontend/`: React 19 + Vite 8 + TS 5.9 (no other deps; tiny hash router). Screens: login/persona switcher, mandates, new mandate (AI draft → edit → sign), mandate detail (contributions, Fund with PayPal, quick actions with "who covered it", request form with evidence, ledger), request detail (fraud card, rule results, what the AI read, payment + last mile, collect button), approvals inbox, chat (+ "talk as…"), people. Django serves `frontend/dist` (WhiteNoise root + `core.views.spa`). CI builds the frontend
+  - Verified locally with the real model: scenario 3 (second funder refused, names Andile), 4 (HELD_FRAUD 100, report → numbers blocked), 5 (cash code → collected)
+  - Open: Fund with PayPal answers 503 until Phase 4 (Orders + JS SDK need the APIMatic plugin); `demo_assets/` photos still missing (scenarios 1–2 in the UI need real images); seeding Render needs a way to run `seed_demo` (free tier has no shell)
 - [ ] Phase 7 — AG Studio dashboard (+ Isililo, Postman)
 - [ ] Phase 8 — Feature freeze, hardening, README
 - [ ] Phase 9 — Video + Devpost text

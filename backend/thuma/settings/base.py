@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
     "core",
     "accounts",
     "mandates",
@@ -100,7 +101,24 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"  # Thuma models use UUIDs v
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "core.api.exception_handler",
 }
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Thuma API",
+    "DESCRIPTION": "Purpose-locked family payments: the AI proposes, code decides, PayPal moves the money.",
+    "VERSION": "1.0.0",
+    # Function views carry no request/response annotations yet; they come with the Postman collection.
+    "DISABLE_ERRORS_AND_WARNINGS": True,
+    "ENABLE_DJANGO_DEPLOY_CHECK": False,
+}
+
+# The built React app (frontend/dist), served by WhiteNoise at the site root; index.html via core.views.spa.
+FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    WHITENOISE_ROOT = FRONTEND_DIST
 
 # PayPal — always the sandbox unless explicitly overridden.
 PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "")

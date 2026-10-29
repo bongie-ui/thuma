@@ -16,7 +16,7 @@ from core.phones import find_phones, normalize_phone
 
 from . import signing
 from .models import (Approval, Beneficiary, BlockedPhone, Decision, Funding, LedgerEntry, Mandate, MandateFunder,
-                     Request, Rule, Upload)
+                     Payee, Request, Rule, Upload)
 from .templates import validate_rules
 
 SYSTEM = "SYSTEM"
@@ -285,6 +285,14 @@ def reassess(request, intent_analyzer=None, now=None):
     return request
 
 
+def sole_payee(mandate):
+    """The mandate's only allowed payee, e.g. the mobile money provider of a support mandate; else None."""
+    from .models import Payee
+
+    ids = {str(i) for r in mandate.rules.all() if r.kind == "allowed_payees" for i in r.params.get("payee_ids", [])}
+    return Payee.objects.filter(pk=next(iter(ids))).first() if len(ids) == 1 else None
+
+
 def execute_decision(request):
     """Act on the latest policy decision: pay on APPROVE; ESCALATED / HELD_FRAUD wait in the funders' inbox."""
     from payments.payouts import pay_request
@@ -305,7 +313,7 @@ def inbox(user):
         .select_related("mandate", "beneficiary", "payee").order_by("-created_at")
 
 
-_ALLOWED_ACTIONS = {
+ALLOWED_ACTIONS = {
     Request.ESCALATED: {Approval.APPROVE, Approval.REJECT, Approval.REPORT_FRAUD},
     Request.HELD_FRAUD: {Approval.VERIFIED_SAFE, Approval.REJECT, Approval.REPORT_FRAUD},
 }
@@ -319,7 +327,7 @@ def apply_approval(request, user, action, note=""):
     request = Request.objects.select_for_update().get(pk=request.pk)
     if not request.mandate.mandate_funders.filter(user=user).exists():
         raise ServiceError("Only this mandate's funders can approve its requests")
-    allowed = _ALLOWED_ACTIONS.get(request.status)
+    allowed = ALLOWED_ACTIONS.get(request.status)
     if allowed is None:
         raise ServiceError(f"This request is {request.get_status_display().lower()} and cannot be approved "
                            "or rejected" + (" (a refusal needs a rule change)" if request.status == Request.REFUSED
